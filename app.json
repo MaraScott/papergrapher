@@ -1,0 +1,27 @@
+{
+  "expo": {
+    "name": "Papergrapher",
+    "slug": "papergrapher",
+    "version": "1.0.0",
+    "orientation": "default",
+    "icon": "./assets/app-icon.png",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#111111"
+    },
+    "assetBundlePatterns": ["assets/papergrapher/index.html"],
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#111111"
+      }
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    }
+  }
+}
