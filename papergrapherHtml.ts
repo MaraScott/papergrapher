@@ -9243,19 +9243,8 @@ pg.layerPanel = function() {
 				.text(window.__PG_LAYER_PANEL_CSS__)
 				.appendTo("head");
 		}
-		return;
 	}
-	if(!jQuery('#layerPanelCSS').exists()) {
-		jQuery("<link />", {
-			href: "css/layerPanel.css",
-			rel: "stylesheet",
-			id: "layerPanelCSS"
-		}).appendTo("head", function() {
-			return true;
-		});
-	};
 };
-	};
 
 	
 	return {

@@ -170,7 +170,8 @@ function patchLayerPanelJs(content) {
   if (loadStart === -1) {
     return content;
   }
-  const loadEnd = content.indexOf('};', loadStart);
+  const endMarker = '\n\t};';
+  const loadEnd = content.indexOf(endMarker, loadStart);
   if (loadEnd === -1) {
     return content;
   }
@@ -182,20 +183,10 @@ function patchLayerPanelJs(content) {
     '\t\t\t\t.text(window.__PG_LAYER_PANEL_CSS__)',
     '\t\t\t\t.appendTo("head");',
     '\t\t}',
-    '\t\treturn;',
     '\t}',
-    '\tif(!jQuery(\'#layerPanelCSS\').exists()) {',
-    '\t\tjQuery(\"<link />\", {',
-    '\t\t\thref: \"css/layerPanel.css\",',
-    '\t\t\trel: \"stylesheet\",',
-    '\t\t\tid: \"layerPanelCSS\"',
-    '\t\t}).appendTo(\"head\", function() {',
-    '\t\t\treturn true;',
-    '\t\t});',
-    '\t};',
     '};'
   ].join('\n');
-  return content.slice(0, loadStart) + replacement + content.slice(loadEnd + 2);
+  return content.slice(0, loadStart) + replacement + content.slice(loadEnd + endMarker.length);
 }
 
 function patchSettingsJs(content) {

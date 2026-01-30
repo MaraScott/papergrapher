@@ -32,6 +32,7 @@ const TRANSPARENT = 'transparent';
 const SWITCH_ICON = require('./assets/icons/icon_switchColor.png');
 const TRANSPARENT_BG = require('./assets/icons/transparent_bg.png');
 const WebColorInput: any = 'input';
+const WebFileInput: any = 'input';
 const MENU_WIDTH = 240;
 const MENU_MAX_HEIGHT = 320;
 const MENU_MARGIN = 8;
@@ -241,6 +242,9 @@ export default function PapergrapherEmbed() {
     const colorStackRef = useRef<any>(null);
     const burgerRef = useRef<any>(null);
     const toolMenuRef = useRef<any>(null);
+    const webImageInputRef = useRef<any>(null);
+    const webSvgInputRef = useRef<any>(null);
+    const webJsonInputRef = useRef<any>(null);
     const [activeTool, setActiveTool] = useState('select');
     const [fillColor, setFillColor] = useState<string>(TRANSPARENT);
     const [strokeColor, setStrokeColor] = useState<string>('#000000');
@@ -395,12 +399,52 @@ export default function PapergrapherEmbed() {
         }
     };
 
+    const handleWebFile = (file: File, action: 'importImage' | 'importSvg' | 'openJson') => {
+        const reader = new FileReader();
+        if (action === 'importImage') {
+            reader.onload = () => {
+                const dataUrl = typeof reader.result === 'string' ? reader.result : '';
+                if (dataUrl) {
+                    sendCommand({ type: 'pg:command', action: 'importImageData', dataUrl });
+                }
+            };
+            reader.readAsDataURL(file);
+            return;
+        }
+        reader.onload = () => {
+            const text = typeof reader.result === 'string' ? reader.result : '';
+            if (!text) return;
+            if (action === 'importSvg') {
+                sendCommand({ type: 'pg:command', action: 'importSvgString', svgString: text });
+            } else {
+                sendCommand({
+                    type: 'pg:command',
+                    action: 'importJsonString',
+                    jsonString: text
+                });
+            }
+        };
+        reader.readAsText(file);
+    };
+
+    const openWebFileDialog = (action: 'importImage' | 'importSvg' | 'openJson') => {
+        const ref =
+            action === 'importImage'
+                ? webImageInputRef
+                : action === 'importSvg'
+                  ? webSvgInputRef
+                  : webJsonInputRef;
+        ref.current?.click();
+    };
+
     const runAction = (action: string) => {
-        if (Platform.OS !== 'web') {
-            if (action === 'importImage' || action === 'importSvg' || action === 'openJson') {
-                void handleNativeImport(action);
+        if (action === 'importImage' || action === 'importSvg' || action === 'openJson') {
+            if (Platform.OS === 'web') {
+                openWebFileDialog(action);
                 return;
             }
+            void handleNativeImport(action);
+            return;
         }
         if (action === 'switchColors') {
             const nextFill = strokeColor;
@@ -660,7 +704,11 @@ export default function PapergrapherEmbed() {
                                 ]}
                                 onPress={() => setTool(tool.id)}
                             >
-                            <Image source={tool.icon} style={styles.toolIconImage} />
+                            <Image
+                                source={tool.icon}
+                                style={styles.toolIconImage}
+                                resizeMode="contain"
+                            />
                         </TouchableOpacity>
                     ))}
                 </View>
@@ -679,7 +727,11 @@ export default function PapergrapherEmbed() {
                         >
                             {fillColor === TRANSPARENT && (
                                 <>
-                                    <Image source={TRANSPARENT_BG} style={styles.transparentBg} />
+                                    <Image
+                                        source={TRANSPARENT_BG}
+                                        style={styles.transparentBg}
+                                        resizeMode="repeat"
+                                    />
                                     <View style={styles.transparentSlash} />
                                 </>
                             )}
@@ -698,6 +750,7 @@ export default function PapergrapherEmbed() {
                                     <Image
                                         source={TRANSPARENT_BG}
                                         style={styles.transparentBg}
+                                        resizeMode="repeat"
                                     />
                                     <View style={styles.transparentSlashSmall} />
                                 </>
@@ -707,7 +760,11 @@ export default function PapergrapherEmbed() {
                             style={styles.switchButton}
                             onPress={() => runAction('switchColors')}
                         >
-                            <Image source={SWITCH_ICON} style={styles.switchIcon} />
+                            <Image
+                                source={SWITCH_ICON}
+                                style={styles.switchIcon}
+                                resizeMode="contain"
+                            />
                         </TouchableOpacity>
                     </View>
 
@@ -982,6 +1039,7 @@ export default function PapergrapherEmbed() {
                                                 <Image
                                                     source={TRANSPARENT_BG}
                                                     style={styles.transparentBgSmall}
+                                                    resizeMode="repeat"
                                                 />
                                                 <View style={styles.transparentSlashSmall} />
                                             </>
@@ -1024,6 +1082,44 @@ export default function PapergrapherEmbed() {
                         )}
                     </View>
                 </View>
+            )}
+
+            {Platform.OS === 'web' && (
+                <>
+                    <WebFileInput
+                        ref={webImageInputRef}
+                        type="file"
+                        accept="image/*"
+                        style={styles.hiddenInput}
+                        onChange={(event: any) => {
+                            const file = event?.target?.files?.[0];
+                            if (file) handleWebFile(file, 'importImage');
+                            if (event?.target) event.target.value = '';
+                        }}
+                    />
+                    <WebFileInput
+                        ref={webSvgInputRef}
+                        type="file"
+                        accept=".svg,image/svg+xml"
+                        style={styles.hiddenInput}
+                        onChange={(event: any) => {
+                            const file = event?.target?.files?.[0];
+                            if (file) handleWebFile(file, 'importSvg');
+                            if (event?.target) event.target.value = '';
+                        }}
+                    />
+                    <WebFileInput
+                        ref={webJsonInputRef}
+                        type="file"
+                        accept=".json,application/json"
+                        style={styles.hiddenInput}
+                        onChange={(event: any) => {
+                            const file = event?.target?.files?.[0];
+                            if (file) handleWebFile(file, 'openJson');
+                            if (event?.target) event.target.value = '';
+                        }}
+                    />
+                </>
             )}
         </View>
     );
@@ -1112,8 +1208,7 @@ const styles = StyleSheet.create({
     },
     toolIconImage: {
         width: 20,
-        height: 20,
-        resizeMode: 'contain'
+        height: 20
     },
     sideDivider: {
         width: '70%',
@@ -1157,8 +1252,7 @@ const styles = StyleSheet.create({
     },
     switchIcon: {
         width: 16,
-        height: 16,
-        resizeMode: 'contain'
+        height: 16
     },
     transparentSlash: {
         position: 'absolute',
@@ -1183,16 +1277,14 @@ const styles = StyleSheet.create({
         width: 26,
         height: 26,
         top: 0,
-        left: 0,
-        resizeMode: 'repeat'
+        left: 0
     },
     transparentBgSmall: {
         position: 'absolute',
         width: 24,
         height: 24,
         top: 0,
-        left: 0,
-        resizeMode: 'repeat'
+        left: 0
     },
     controlBlock: {
         width: 60,
@@ -1421,5 +1513,8 @@ const styles = StyleSheet.create({
         height: 28,
         borderWidth: 0,
         backgroundColor: 'transparent'
+    },
+    hiddenInput: {
+        display: 'none'
     }
 });
