@@ -299,13 +299,32 @@ function buildInlineHtml() {
     }
   ];
 
+  const embedCss = [
+    '/* embed overrides */',
+    'html, body {',
+    '\tbackground-color: #fff;',
+    '}',
+    '#loadingScreen,',
+    '#appNav,',
+    '#toolbar,',
+    '#statusBar,',
+    '#codeEditorContainer,',
+    '#menuInputBlocker,',
+    '#colorInputBlocker,',
+    '.toolOptionPanel,',
+    '.layerPanel {',
+    '\tdisplay: none !important;',
+    '}'
+  ].join('\n');
+
   const cssInline = cssLinks
     .map((href) => {
       const cssPath = path.join(srcDir, href);
       const cssContent = replaceCssAssets(readText(cssPath), cssReplacements);
       return `/* ${href} */\n${cssContent}`;
     })
-    .join('\n\n');
+    .join('\n\n')
+    .concat('\n\n', embedCss);
 
   const initIndex = scriptTags.findIndex((tag) => tag.src === 'js/init.js');
   const extraScripts = ['js/lib/stacktrace.js', 'js/lib/taboverride.min.js'];
@@ -391,9 +410,110 @@ function buildInlineHtml() {
     '})();'
   ].join('\n');
 
+  const commandBridgeScript = [
+    '(function () {',
+    '  var queue = [];',
+    '  function isReady() {',
+    '    return !!(window.pg && pg.toolbar && pg.stylebar && pg.undo && pg.export);',
+    '  }',
+    '  function applyColor(kind, color) {',
+    '    try {',
+    '      if (kind === "fill") {',
+    '        pg.stylebar.setFillColor(color);',
+    '        pg.stylebar.applyFillColorToSelection(color);',
+    '      } else {',
+    '        pg.stylebar.setStrokeColor(color);',
+    '        pg.stylebar.applyStrokeColorToSelection(color);',
+    '      }',
+    '    } catch (e) {}',
+    '  }',
+    '  function exec(cmd) {',
+    '    if (!cmd || !cmd.action) return;',
+    '    try {',
+    '      switch (cmd.action) {',
+    '        case "tool":',
+    '          if (cmd.toolId) { pg.toolbar.switchTool(cmd.toolId, true); }',
+    '          break;',
+    '        case "fillColor":',
+    '          applyColor("fill", cmd.color || null);',
+    '          break;',
+    '        case "strokeColor":',
+    '          applyColor("stroke", cmd.color || null);',
+    '          break;',
+    '        case "strokeWidth":',
+    '          if (cmd.value !== undefined && cmd.value !== null) {',
+    '            pg.stylebar.setStrokeWidth(cmd.value, true);',
+    '            pg.stylebar.applyStrokeWidthToSelection(cmd.value);',
+    '          }',
+    '          break;',
+    '        case "opacity":',
+    '          if (cmd.value !== undefined && cmd.value !== null) {',
+    '            pg.stylebar.setOpacity(cmd.value, true);',
+    '            pg.stylebar.applyOpacityToSelection(cmd.value);',
+    '          }',
+    '          break;',
+    '        case "blendMode":',
+    '          if (cmd.value) {',
+    '            pg.stylebar.setBlendMode(cmd.value);',
+    '            pg.stylebar.applyBlendModeToSelection(cmd.value);',
+    '          }',
+    '          break;',
+    '        case "switchColors":',
+    '          pg.stylebar.switchColors();',
+    '          break;',
+    '        case "undo":',
+    '          pg.undo.undo();',
+    '          break;',
+    '        case "redo":',
+    '          pg.undo.redo();',
+    '          break;',
+    '        case "exportImage":',
+    '          pg.export.exportAndPromptImage();',
+    '          break;',
+    '        case "exportSvg":',
+    '          pg.export.exportAndPromptSVG();',
+    '          break;',
+    '        case "resetView":',
+    '          if (pg.view && pg.view.resetZoom) { pg.view.resetZoom(); }',
+    '          if (pg.view && pg.view.resetPan) { pg.view.resetPan(); }',
+    '          break;',
+    '      }',
+    '    } catch (e) {',
+    '      console.warn("Command failed", e);',
+    '    }',
+    '  }',
+    '  function handle(raw) {',
+    '    var data = raw;',
+    '    if (typeof data === "string") {',
+    '      try { data = JSON.parse(data); } catch (e) { data = null; }',
+    '    }',
+    '    if (!data || data.type !== "pg:command") return;',
+    '    if (!isReady()) {',
+    '      queue.push(data);',
+    '      return;',
+    '    }',
+    '    exec(data);',
+    '  }',
+    '  if (window.addEventListener) {',
+    '    window.addEventListener("message", function (e) { handle(e.data); });',
+    '  }',
+    '  if (document && document.addEventListener) {',
+    '    document.addEventListener("message", function (e) { handle(e.data); });',
+    '  }',
+    '  var interval = setInterval(function () {',
+    '    if (!isReady()) return;',
+    '    while (queue.length) {',
+    '      exec(queue.shift());',
+    '    }',
+    '    clearInterval(interval);',
+    '  }, 300);',
+    '})();'
+  ].join('\n');
+
   const inlineScripts = [
     `<script>\n${escapeInlineScript(bootstrapScript)}\n</script>`,
     `<script>\n${escapeInlineScript(canvasHintScript)}\n</script>`,
+    `<script>\n${escapeInlineScript(commandBridgeScript)}\n</script>`,
     ...scriptTags.map((tag) => {
       const scriptPath = path.join(srcDir, tag.src);
       const raw = readText(scriptPath);
