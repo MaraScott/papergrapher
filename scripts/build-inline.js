@@ -24,6 +24,10 @@ function safeJson(value) {
   return JSON.stringify(value).replace(/<\/script/gi, '<\\/script');
 }
 
+function escapeInlineScript(content) {
+  return content.replace(/<\/script/gi, '<\\/script');
+}
+
 function replaceCssAssets(css, replacements) {
   return replacements.reduce((acc, replacement) => {
     const { pattern, value } = replacement;
@@ -39,10 +43,11 @@ function patchToolbarJs(content) {
 
   const replacement = [
     "var toolIcon = window.__PG_TOOL_ICONS__ && window.__PG_TOOL_ICONS__[tool.id];",
+    "var fallbackIcon = window.__PG_TOOL_ICON_FALLBACK__ || null;",
     "if (toolIcon) {",
     "\t$tool.css({'background-image': 'url(' + toolIcon + ')'});",
-    "} else {",
-    "\t$tool.css({'background-image': 'url(assets/tools/tool_'+tool.id+'.svg)'});",
+    "} else if (fallbackIcon) {",
+    "\t$tool.css({'background-image': 'url(' + fallbackIcon + ')'});",
     "}"
   ].join('\n\t\t\t');
 
@@ -139,12 +144,55 @@ function patchCodeEditorJs(content) {
   return content;
 }
 
+function patchSettingsJs(content) {
+  const replacement = [
+    '\t\tvar data = window.__PG_CONFIG__;',
+    '\t\tif (!data) {',
+    '\t\t\tconsole.error(\'Loading config.json failed: Not Found\');',
+    '\t\t\treturn;',
+    '\t\t}',
+    '\t\tvar storage = window.__PG_STORAGE__;',
+    '\t\t',
+    '\t\tconfig = data;',
+    '\t\tvar storageVersionNumber = storage ? storage.getItem("pg.version") : null;',
+    '\t\tif(storageVersionNumber && storageVersionNumber !== config.appVersion) {',
+    '\t\t\tconsole.warn(\'Settings version mismatch. Reverting all settings to default for now.\');',
+    '\t\t\tclearSettings();',
+    '\t\t} else if(!storageVersionNumber) {',
+    '\t\t\tsetVersionNumber();',
+    '\t\t}',
+    '\t\t',
+    '\t\tdocument.title = \'Papergrapher \' + config.appVersion;'
+  ].join('\n');
+
+  const ajaxStart = content.indexOf('jQuery.ajax({');
+  if (ajaxStart === -1) {
+    return content;
+  }
+
+  const errorStart = content.indexOf('}).error', ajaxStart);
+  if (errorStart === -1) {
+    return content;
+  }
+
+  const ajaxEnd = content.indexOf('});', errorStart);
+  if (ajaxEnd === -1) {
+    return content;
+  }
+
+  var updated = content.slice(0, ajaxStart) + replacement + content.slice(ajaxEnd + 3);
+  return updated.replace(/localStorage\./g, 'window.__PG_STORAGE__.');
+}
+
 function patchScript(src, content) {
   if (src === 'js/toolbar.js') {
     return patchToolbarJs(content);
   }
   if (src === 'js/text.js') {
     return patchTextJs(content);
+  }
+  if (src === 'js/settings.js') {
+    return patchSettingsJs(content);
   }
   if (src === 'js/codeEditor.js') {
     return patchCodeEditorJs(content);
@@ -189,6 +237,7 @@ function buildInlineHtml() {
       toolIcons[id] = toDataUri(path.join(toolsDir, file), 'image/svg+xml');
     }
   }
+  const toolFallbackIcon = toolIcons.select || Object.values(toolIcons)[0] || '';
 
   const fontListPath = path.join(srcDir, 'fonts', 'fonts.json');
   const fontsJson = JSON.parse(readText(fontListPath));
@@ -213,6 +262,7 @@ function buildInlineHtml() {
   }
 
   const codeEditorCss = readText(path.join(srcDir, 'css', 'codeEditor.css'));
+  const configJson = JSON.parse(readText(path.join(srcDir, 'config.json')));
 
   const iconSwitchPath = path.join(srcDir, 'assets', 'icon_switchColor.svg');
   const selectButtonPath = path.join(srcDir, 'assets', 'selectButton.png');
@@ -247,20 +297,86 @@ function buildInlineHtml() {
     }
   }
 
+  const storageShimScript = [
+    '(function () {',
+    '  if (typeof window === "undefined") return;',
+    '  var memoryStore = {};',
+    '  function createMemoryStorage() {',
+    '    return {',
+    '      getItem: function (key) {',
+    '        return Object.prototype.hasOwnProperty.call(memoryStore, key) ? memoryStore[key] : null;',
+    '      },',
+    '      setItem: function (key, value) {',
+    '        memoryStore[key] = String(value);',
+    '      },',
+    '      removeItem: function (key) {',
+    '        delete memoryStore[key];',
+    '      },',
+    '      clear: function () {',
+    '        memoryStore = {};',
+    '      }',
+    '    };',
+    '  }',
+    '  function tryLocalStorage() {',
+    '    try {',
+    '      if (!("localStorage" in window)) return null;',
+    '      var ls = window.localStorage;',
+    '      if (!ls) return null;',
+    '      var testKey = "__pg_test__";',
+    '      ls.setItem(testKey, "1");',
+    '      ls.removeItem(testKey);',
+    '      return ls;',
+    '    } catch (e) {',
+    '      return null;',
+    '    }',
+    '  }',
+    '  var storage = null;',
+    '  try {',
+    '    storage = window.__PG_STORAGE__ || null;',
+    '  } catch (e) {}',
+    '  if (!storage) {',
+    '    storage = tryLocalStorage() || createMemoryStorage();',
+    '  }',
+    '  window.__PG_STORAGE__ = storage;',
+    '})();'
+  ].join('\n');
+
   const bootstrapScript = [
+    storageShimScript,
     'window.__PG_TOOL_ICONS__ = ' + safeJson(toolIcons) + ';',
+    'window.__PG_TOOL_ICON_FALLBACK__ = ' + safeJson(toolFallbackIcon) + ';',
     'window.__PG_FONT_LIST__ = ' + safeJson(fontList) + ';',
     'window.__PG_FONT_DATA__ = ' + safeJson(fontData) + ';',
     'window.__PG_USER_SCRIPTS__ = ' + safeJson({ scripts: userScriptList, content: userScriptContent }) + ';',
-    'window.__PG_CODE_EDITOR_CSS__ = ' + safeJson(codeEditorCss) + ';'
+    'window.__PG_CODE_EDITOR_CSS__ = ' + safeJson(codeEditorCss) + ';',
+    'window.__PG_CONFIG__ = ' + safeJson(configJson) + ';'
+  ].join('\n');
+
+  const canvasHintScript = [
+    '(function () {',
+    '  try {',
+    '    if (typeof HTMLCanvasElement === "undefined") return;',
+    '    var originalGetContext = HTMLCanvasElement.prototype.getContext;',
+    '    if (!originalGetContext || originalGetContext.__pg_patched) return;',
+    '    HTMLCanvasElement.prototype.getContext = function (type, options) {',
+    '      if (type === "2d") {',
+    '        var nextOptions = options ? Object.assign({}, options, { willReadFrequently: true }) : { willReadFrequently: true };',
+    '        return originalGetContext.call(this, type, nextOptions);',
+    '      }',
+    '      return originalGetContext.call(this, type, options);',
+    '    };',
+    '    HTMLCanvasElement.prototype.getContext.__pg_patched = true;',
+    '  } catch (error) {}',
+    '})();'
   ].join('\n');
 
   const inlineScripts = [
-    `<script>\n${bootstrapScript}\n</script>`,
+    `<script>\n${escapeInlineScript(bootstrapScript)}\n</script>`,
+    `<script>\n${escapeInlineScript(canvasHintScript)}\n</script>`,
     ...scriptTags.map((tag) => {
       const scriptPath = path.join(srcDir, tag.src);
       const raw = readText(scriptPath);
-      const patched = patchScript(tag.src, raw);
+      const patched = escapeInlineScript(patchScript(tag.src, raw));
       const attrs = [];
       if (tag.type) attrs.push(`type="${tag.type}"`);
       if (tag.dataCanvas) attrs.push(`data-paper-canvas="${tag.dataCanvas}"`);

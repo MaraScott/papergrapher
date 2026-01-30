@@ -3,10 +3,42 @@
 pg.export = function() {
 	var exportRect;
 	var canvas;
+	var hasNativeBridge = false;
+
+	var postToNative = function(payload) {
+		if (!hasNativeBridge) return;
+		try {
+			window.ReactNativeWebView.postMessage(JSON.stringify(payload));
+		} catch (e) {
+			// no-op
+		}
+	};
+	
+	var getSafeFileName = function(defaultName) {
+		var fallbackName = defaultName || "export";
+		try {
+			var name = prompt("Name your file", fallbackName);
+			if (name === null || name === "") {
+				return hasNativeBridge ? fallbackName : null;
+			}
+			return name;
+		} catch (e) {
+			return hasNativeBridge ? fallbackName : null;
+		}
+	};
+	
+	var blobToDataUrl = function(blob, callback) {
+		var reader = new FileReader();
+		reader.onloadend = function() {
+			callback(reader.result);
+		};
+		reader.readAsDataURL(blob);
+	};
 	
 	
 	var setup = function() {
 		canvas = document.getElementById("paperCanvas");
+		hasNativeBridge = !!(window.ReactNativeWebView && window.ReactNativeWebView.postMessage);
 	};
 	
 	
@@ -26,7 +58,7 @@ pg.export = function() {
 	
 	
 	var exportAndPromptImage = function() {
-		var fileName = prompt("Name your file", "export");
+		var fileName = getSafeFileName("export");
 
 		if (fileName !== null) {
 			pg.hover.clearHoveredItem();
@@ -57,6 +89,22 @@ pg.export = function() {
 				var context = $tempCanvas[0].getContext("2d");
 				context.putImageData(imgData,0,0);
 				$tempCanvas[0].toBlob(function(blob) {
+					if (hasNativeBridge) {
+						blobToDataUrl(blob, function(dataUrl) {
+							postToNative({
+								type: "export:image",
+								fileName: fileNameNoExtension + ".png",
+								dataUrl: dataUrl
+							});
+							
+							// restore guide layer (with all items) after export
+							paper.project.importJSON(guideLayerBackup);
+							
+							// then reactivate the active layer
+							activeLayer.activate();
+						});
+						return;
+					}
 					saveAs(blob, fileNameNoExtension+'.png');
 						
 					// restore guide layer (with all items) after export
@@ -72,6 +120,22 @@ pg.export = function() {
 			} else {
 				var fileNameNoExtension = fileName.split(".png")[0];
 				canvas.toBlob(function(blob) {
+					if (hasNativeBridge) {
+						blobToDataUrl(blob, function(dataUrl) {
+							postToNative({
+								type: "export:image",
+								fileName: fileNameNoExtension + ".png",
+								dataUrl: dataUrl
+							});
+							
+							// restore guide layer (with all items) after export
+							paper.project.importJSON(guideLayerBackup);
+							
+							// then reactivate the active layer
+							activeLayer.activate();
+						});
+						return;
+					}
 					saveAs(blob, fileNameNoExtension+'.png');
 					
 					// restore guide layer (with all items) after export
@@ -88,7 +152,7 @@ pg.export = function() {
 	
 	
 	var exportAndPromptSVG = function() {
-		var fileName = prompt("Name your file", "export");
+		var fileName = getSafeFileName("export");
 
 		if (fileName !== null) {
 			pg.hover.clearHoveredItem();
@@ -106,8 +170,17 @@ pg.export = function() {
 			
 			// export data, create blob  and save as file on users device
 			var exportData = paper.project.exportSVG({ asString: true, bounds: exportRect });
-			var blob = new Blob([exportData], {type: "image/svg+xml;charset=" + document.characterSet});
-			saveAs(blob, fileNameNoExtension+'.svg');
+			if (hasNativeBridge) {
+				var svgBase64 = window.btoa(unescape(encodeURIComponent(exportData)));
+				postToNative({
+					type: "export:svg",
+					fileName: fileNameNoExtension + ".svg",
+					dataUrl: "data:image/svg+xml;base64," + svgBase64
+				});
+			} else {
+				var blob = new Blob([exportData], {type: "image/svg+xml;charset=" + document.characterSet});
+				saveAs(blob, fileNameNoExtension+'.svg');
+			}
 			
 			// restore guide layer (with all items) after export
 			paper.project.importJSON(guideLayerBackup);

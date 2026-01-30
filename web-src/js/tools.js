@@ -25,7 +25,11 @@ pg.tools = function() {
 	
 	// localstorage
 	var getLocalOptions = function(options) {
-		var storageJSON = localStorage.getItem('pg.tools.'+options.id);
+		var storage = window.__PG_STORAGE__;
+		if(!storage) {
+			return options;
+		}
+		var storageJSON = storage.getItem('pg.tools.'+options.id);
 		if(storageJSON && storageJSON.length > 0) {
 			var storageOptions = JSON.parse(storageJSON);
 			
@@ -42,13 +46,21 @@ pg.tools = function() {
 	
 	
 	var setLocalOptions = function(options) {
+		var storage = window.__PG_STORAGE__;
+		if(!storage) {
+			return;
+		}
 		var optionsJSON = JSON.stringify(options, null, 2);
-		localStorage.setItem('pg.tools.'+options.id, optionsJSON);
+		storage.setItem('pg.tools.'+options.id, optionsJSON);
 	};
 	
 	
 	var deleteLocalOptions = function(id) {
-		localStorage.removeItem('pg.tools.'+id);
+		var storage = window.__PG_STORAGE__;
+		if(!storage) {
+			return;
+		}
+		storage.removeItem('pg.tools.'+id);
 	};
 	
 	

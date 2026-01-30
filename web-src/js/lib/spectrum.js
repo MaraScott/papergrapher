@@ -53,8 +53,17 @@
         return contains(style.backgroundColor, 'rgba') || contains(style.backgroundColor, 'hsla');
     })(),
     inputTypeColorSupport = (function() {
-        var colorInput = $("<input type='color' value='!' />")[0];
-        return colorInput.type === "color" && colorInput.value !== "!";
+        var colorInput = $("<input type='color' />")[0];
+        // Avoid invalid value warnings by only checking the input type.
+        return colorInput.type === "color";
+    })(),
+    safeStorage = (function() {
+        try {
+            return window.__PG_STORAGE__ || null;
+        }
+        catch (e) {
+            return null;
+        }
     })(),
     replaceInput = [
         "<div class='sp-replacer'>",
@@ -276,7 +285,8 @@
 
             updateSelectionPaletteFromStorage();
 
-            offsetElement.bind("click.spectrum touchstart.spectrum", function (e) {
+            var toggleEvent = "click.spectrum";
+            offsetElement.bind(toggleEvent, function (e) {
                 if (!disabled) {
                     toggle();
                 }
@@ -418,20 +428,21 @@
                 return false;
             }
 
-            var paletteEvent = IE ? "mousedown.spectrum" : "click.spectrum touchstart.spectrum";
+            var paletteEvent = IE ? "mousedown.spectrum" : (window.PointerEvent ? "pointerdown.spectrum" : "click.spectrum");
             paletteContainer.delegate(".sp-thumb-el", paletteEvent, palletElementClick);
             initialColorContainer.delegate(".sp-thumb-el:nth-child(1)", paletteEvent, { ignore: true }, palletElementClick);
         }
 
         function updateSelectionPaletteFromStorage() {
 
-            if (localStorageKey && window.localStorage) {
+            if (localStorageKey && safeStorage) {
 
                 // Migrate old palettes over to new format.  May want to remove this eventually.
                 try {
-                    var oldPalette = window.localStorage[localStorageKey].split(",#");
+                    var oldPaletteValue = safeStorage.getItem(localStorageKey);
+                    var oldPalette = oldPaletteValue ? oldPaletteValue.split(",#") : [];
                     if (oldPalette.length > 1) {
-                        delete window.localStorage[localStorageKey];
+                        safeStorage.removeItem(localStorageKey);
                         $.each(oldPalette, function(i, c) {
                              addColorToSelectionPalette(c);
                         });
@@ -440,7 +451,8 @@
                 catch(e) { }
 
                 try {
-                    selectionPalette = window.localStorage[localStorageKey].split(";");
+                    var paletteValue = safeStorage.getItem(localStorageKey);
+                    selectionPalette = paletteValue ? paletteValue.split(";") : [];
                 }
                 catch (e) { }
             }
@@ -456,9 +468,9 @@
                     }
                 }
 
-                if (localStorageKey && window.localStorage) {
+                if (localStorageKey && safeStorage) {
                     try {
-                        window.localStorage[localStorageKey] = selectionPalette.join(";");
+                        safeStorage.setItem(localStorageKey, selectionPalette.join(";"));
                     }
                     catch(e) { }
                 }
@@ -838,7 +850,7 @@
 
         function destroy() {
             boundElement.show();
-            offsetElement.unbind("click.spectrum touchstart.spectrum");
+            offsetElement.unbind("click.spectrum pointerdown.spectrum");
             container.remove();
             replacer.remove();
             spectrums[spect.id] = null;
@@ -1032,7 +1044,8 @@
             dragging = false;
         }
 
-        $(element).bind("touchstart mousedown", start);
+        var dragStartEvent = window.PointerEvent ? "pointerdown" : "mousedown";
+        $(element).bind(dragStartEvent, start);
     }
 
     function throttle(func, wait, debounce) {

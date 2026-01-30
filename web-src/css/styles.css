@@ -1,6 +1,7 @@
 body, html {
 	overflow:hidden;
 	height: 100%;
+	background-color: #fff;
 }
 
 body {
@@ -13,6 +14,9 @@ body {
 	height: 100%;
 	top: 0;
 	left: 0;
+	background-color: #fff;
+	touch-action: none;
+	-ms-touch-action: none;
 }
 
 body, input, button, textarea, label {
