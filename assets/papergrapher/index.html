@@ -1463,11 +1463,8 @@ html, body {
 #appNav,
 #toolbar,
 #statusBar,
-#codeEditorContainer,
 #menuInputBlocker,
-#colorInputBlocker,
-.toolOptionPanel,
-.layerPanel {
+#colorInputBlocker {
 	display: none !important;
 }
 </style>
@@ -1843,6 +1840,122 @@ window.__PG_CONFIG__ = {"appVersion":"0.42"};
           break;
         case "exportSvg":
           pg.export.exportAndPromptSVG();
+          break;
+        case "copy":
+          pg.edit.copySelectionToClipboard();
+          break;
+        case "paste":
+          pg.edit.pasteObjectsFromClipboard();
+          break;
+        case "deleteSelection":
+          pg.selection.deleteSelection();
+          break;
+        case "selectAll":
+          pg.selection.selectAllItems();
+          break;
+        case "deselectAll":
+          pg.selection.clearSelection();
+          break;
+        case "invertSelection":
+          pg.selection.invertItemSelection();
+          break;
+        case "randomSelection":
+          pg.selection.selectRandomItems();
+          break;
+        case "selectAllSegments":
+          pg.selection.selectAllSegments();
+          break;
+        case "invertSegments":
+          pg.selection.invertSegmentSelection();
+          break;
+        case "groupSelection":
+          pg.group.groupSelection();
+          break;
+        case "ungroupSelection":
+          pg.group.ungroupSelection();
+          break;
+        case "moveToActiveLayer":
+          pg.layer.addSelectedItemsToActiveLayer();
+          break;
+        case "bringToFront":
+          pg.order.bringSelectionToFront();
+          break;
+        case "sendToBack":
+          pg.order.sendSelectionToBack();
+          break;
+        case "compoundCreate":
+          pg.compoundPath.createFromSelection();
+          break;
+        case "compoundRelease":
+          pg.compoundPath.releaseSelection();
+          break;
+        case "booleanUnite":
+          pg.boolean.booleanUnite();
+          break;
+        case "booleanIntersect":
+          pg.boolean.booleanIntersect();
+          break;
+        case "booleanSubtract":
+          pg.boolean.booleanSubtract();
+          break;
+        case "booleanExclude":
+          pg.boolean.booleanExclude();
+          break;
+        case "booleanDivide":
+          pg.boolean.booleanDivide();
+          break;
+        case "textToOutlines":
+          pg.text.convertSelectionToOutlines();
+          break;
+        case "newDocument":
+          pg.document.clear();
+          break;
+        case "saveDocument":
+          pg.document.saveJSONDocument();
+          break;
+        case "resetSettings":
+          pg.settings.clearSettings();
+          break;
+        case "toggleLayerPanel":
+          if (pg.layerPanel && pg.layerPanel.toggleVisibility) { pg.layerPanel.toggleVisibility(); }
+          break;
+        case "toggleScriptEditor":
+          if (pg.codeEditor && pg.codeEditor.toggleVisibility) { pg.codeEditor.toggleVisibility(); }
+          break;
+        case "showAbout":
+          if (pg.menu && pg.menu.showAboutModal) { pg.menu.showAboutModal(); }
+          break;
+        case "zoomIn":
+          if (pg.view && pg.view.zoomBy) { pg.view.zoomBy(1.25); }
+          break;
+        case "zoomOut":
+          if (pg.view && pg.view.zoomBy) { pg.view.zoomBy(1/1.25); }
+          break;
+        case "resetZoom":
+          if (pg.view && pg.view.resetZoom) { pg.view.resetZoom(); }
+          break;
+        case "resetPan":
+          if (pg.view && pg.view.resetPan) { pg.view.resetPan(); }
+          break;
+        case "openJson":
+          var jsonInput = document.getElementById("fileUploadJSON");
+          if (jsonInput) { jsonInput.click(); }
+          break;
+        case "importImage":
+          var imageInput = document.getElementById("fileUploadImage");
+          if (imageInput) { imageInput.click(); }
+          break;
+        case "importSvg":
+          var svgInput = document.getElementById("fileUploadSVG");
+          if (svgInput) { svgInput.click(); }
+          break;
+        case "importImageUrl":
+          var imgUrl = prompt("Paste URL to Image (jpg, png, gif)", "http://");
+          if (imgUrl) { pg.import.importAndAddExternalImage(imgUrl); }
+          break;
+        case "importSvgUrl":
+          var svgUrl = prompt("Paste URL to SVG", "http://");
+          if (svgUrl) { pg.import.importAndAddSVG(svgUrl); }
           break;
         case "resetView":
           if (pg.view && pg.view.resetZoom) { pg.view.resetZoom(); }
