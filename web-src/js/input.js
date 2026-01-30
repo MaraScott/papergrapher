@@ -4,6 +4,7 @@ pg.input = function() {
 	
 	var downKeys = [];
 	var mouseIsDown = false;
+	var middleMouseDown = false;
 	
 	var setup = function () {
 		setupKeyboard();
@@ -229,7 +230,7 @@ pg.input = function() {
 				
 			}
 			if ((e.which === 2)) { //middle
-				
+				middleMouseDown = true;
 			}
 			
 			
@@ -238,7 +239,7 @@ pg.input = function() {
 				mouseIsDown = false;
 			}
 			if ((e.which === 2)) { // middle
-				
+				middleMouseDown = false;
 			}
 			if((e.which === 3)) { //right
 				
@@ -251,13 +252,13 @@ pg.input = function() {
 		
 
 		jQuery(window).bind('mousewheel DOMMouseScroll', function(event){
-			if(event.altKey) {
-				if (pg.toolbar.getActiveTool().options.id !== 'viewzoom') {
-					pg.toolbar.switchTool('viewzoom');
-				}
-				if(pg.toolbar.getActiveTool()) {
-					pg.toolbar.getActiveTool().updateTool(event);
-				}
+			if(userIsTyping(event)) return;
+			event.preventDefault();
+			if (pg.toolbar.getActiveTool().options.id !== 'viewzoom') {
+				pg.toolbar.switchTool('viewzoom');
+			}
+			if(pg.toolbar.getActiveTool()) {
+				pg.toolbar.getActiveTool().updateTool(event);
 			}
 		});
 	};

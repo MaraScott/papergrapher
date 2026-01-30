@@ -1796,6 +1796,8 @@ window.__PG_CONFIG__ = {"appVersion":"0.42"};
 </script>
 <script>
 (function () {
+  var pinchActive = false;
+  var prevToolId = null;
   function getCanvas() {
     return document.getElementById("paperCanvas");
   }
@@ -1807,13 +1809,45 @@ window.__PG_CONFIG__ = {"appVersion":"0.42"};
   function midpoint(a, b) {
     return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
   }
-  function getTouches(evt) {
+  function getTouches(evt, canvas) {
     var t = evt.touches;
     if (!t || t.length < 2) return null;
+    var rect = canvas && canvas.getBoundingClientRect ? canvas.getBoundingClientRect() : null;
+    var left = rect ? rect.left : 0;
+    var top = rect ? rect.top : 0;
     return [
-      { x: t[0].clientX, y: t[0].clientY },
-      { x: t[1].clientX, y: t[1].clientY }
+      { x: t[0].clientX - left, y: t[0].clientY - top },
+      { x: t[1].clientX - left, y: t[1].clientY - top }
     ];
+  }
+  function setPinchActive(active) {
+    pinchActive = active;
+    if (!window.pg || !pg.toolbar || !pg.toolbar.getActiveTool || !pg.toolbar.switchTool) return;
+    if (active) {
+      if (!prevToolId) {
+        var activeTool = pg.toolbar.getActiveTool();
+        prevToolId = activeTool && activeTool.options ? activeTool.options.id : null;
+      }
+      if (prevToolId && prevToolId !== "viewgrab") {
+        pg.toolbar.switchTool("viewgrab", true);
+      }
+    } else {
+      if (prevToolId && pg.toolbar.getActiveTool && pg.toolbar.getActiveTool().options && pg.toolbar.getActiveTool().options.id === "viewgrab") {
+        pg.toolbar.switchTool(prevToolId, true);
+      }
+      prevToolId = null;
+    }
+  }
+  function stopEvent(evt) {
+    if (!evt) return;
+    if (evt.stopImmediatePropagation) {
+      evt.stopImmediatePropagation();
+    } else if (evt.stopPropagation) {
+      evt.stopPropagation();
+    }
+    if (evt.preventDefault) {
+      evt.preventDefault();
+    }
   }
   function attach() {
     var canvas = getCanvas();
@@ -1823,36 +1857,35 @@ window.__PG_CONFIG__ = {"appVersion":"0.42"};
     var lastZoom = null;
     canvas.addEventListener("touchstart", function (evt) {
       if (evt.touches.length === 2) {
-        var pts = getTouches(evt);
+        var pts = getTouches(evt, canvas);
         if (!pts) return;
         lastDistance = distance(pts[0], pts[1]);
         lastCenter = midpoint(pts[0], pts[1]);
         lastZoom = paper && paper.view ? paper.view.zoom : 1;
-        evt.preventDefault();
+        setPinchActive(true);
+        stopEvent(evt);
       }
     }, { passive: false });
     canvas.addEventListener("touchmove", function (evt) {
       if (evt.touches.length === 2 && paper && paper.view) {
-        var pts = getTouches(evt);
+        var pts = getTouches(evt, canvas);
         if (!pts || !lastCenter || !lastDistance) return;
         var newCenter = midpoint(pts[0], pts[1]);
         var newDistance = distance(pts[0], pts[1]);
         var factor = newDistance / lastDistance;
         if (factor && isFinite(factor)) {
+          var prevViewPoint = new paper.Point(lastCenter.x, lastCenter.y);
+          var nextViewPoint = new paper.Point(newCenter.x, newCenter.y);
+          var prevProjectPoint = paper.view.viewToProject(prevViewPoint);
           var targetZoom = Math.max(0.05, Math.min(64, paper.view.zoom * factor));
-          var viewPoint = new paper.Point(newCenter.x, newCenter.y);
-          var before = paper.view.viewToProject(viewPoint);
           paper.view.zoom = targetZoom;
-          var after = paper.view.viewToProject(viewPoint);
-          paper.view.center = paper.view.center.add(before.subtract(after));
+          var nextProjectPoint = paper.view.viewToProject(nextViewPoint);
+          paper.view.center = paper.view.center.add(prevProjectPoint.subtract(nextProjectPoint));
         }
-        var lastViewPoint = new paper.Point(lastCenter.x, lastCenter.y);
-        var newViewPoint = new paper.Point(newCenter.x, newCenter.y);
-        var delta = paper.view.viewToProject(lastViewPoint).subtract(paper.view.viewToProject(newViewPoint));
-        paper.view.scrollBy(delta);
         lastCenter = newCenter;
         lastDistance = newDistance;
-        evt.preventDefault();
+        setPinchActive(true);
+        stopEvent(evt);
       }
     }, { passive: false });
     canvas.addEventListener("touchend", function (evt) {
@@ -1860,6 +1893,7 @@ window.__PG_CONFIG__ = {"appVersion":"0.42"};
         lastDistance = null;
         lastCenter = null;
         lastZoom = null;
+        setPinchActive(false);
       }
     });
     return true;
@@ -5900,6 +5934,29 @@ pg.view = function() {
 		}
 		pg.statusbar.update();
 	};
+
+	var zoomByPoint = function(factor, viewPoint) {
+		var view = paper.view;
+		var zoom = view.zoom;
+		var newZoom = zoom * factor;
+
+		if(newZoom <= 0.01) {
+			newZoom = 0.01;
+		} else if(newZoom >= 1000) {
+			newZoom = 1000;
+		}
+
+		if(viewPoint && view.viewToProject) {
+			var projectPoint = view.viewToProject(viewPoint);
+			var beta = zoom / newZoom;
+			var offset = projectPoint.subtract(view.center);
+			view.zoom = newZoom;
+			view.center = projectPoint.subtract(offset.multiply(beta));
+		} else {
+			view.zoom = newZoom;
+		}
+		pg.statusbar.update();
+	};
 	
 	
 	var resetZoom = function() {
@@ -5915,10 +5972,12 @@ pg.view = function() {
 	
 	return {
 		zoomBy: zoomBy,
+		zoomByPoint: zoomByPoint,
 		resetZoom: resetZoom,
 		resetPan: resetPan
 	};
 }();
+
 </script>
 <script>
 
@@ -7468,6 +7527,7 @@ pg.input = function() {
 	
 	var downKeys = [];
 	var mouseIsDown = false;
+	var middleMouseDown = false;
 	
 	var setup = function () {
 		setupKeyboard();
@@ -7693,7 +7753,7 @@ pg.input = function() {
 				
 			}
 			if ((e.which === 2)) { //middle
-				
+				middleMouseDown = true;
 			}
 			
 			
@@ -7702,7 +7762,7 @@ pg.input = function() {
 				mouseIsDown = false;
 			}
 			if ((e.which === 2)) { // middle
-				
+				middleMouseDown = false;
 			}
 			if((e.which === 3)) { //right
 				
@@ -7715,13 +7775,13 @@ pg.input = function() {
 		
 
 		jQuery(window).bind('mousewheel DOMMouseScroll', function(event){
-			if(event.altKey) {
-				if (pg.toolbar.getActiveTool().options.id !== 'viewzoom') {
-					pg.toolbar.switchTool('viewzoom');
-				}
-				if(pg.toolbar.getActiveTool()) {
-					pg.toolbar.getActiveTool().updateTool(event);
-				}
+			if(userIsTyping(event)) return;
+			event.preventDefault();
+			if (pg.toolbar.getActiveTool().options.id !== 'viewzoom') {
+				pg.toolbar.switchTool('viewzoom');
+			}
+			if(pg.toolbar.getActiveTool()) {
+				pg.toolbar.getActiveTool().updateTool(event);
 			}
 		});
 	};
@@ -12841,8 +12901,8 @@ pg.tools.zoom = function() {
 			if (event.modifiers.option) {
 				factor = 1 / factor;
 			}
-			pg.view.zoomBy(factor);
-			paper.view.center = event.point;
+			var viewPoint = paper.view.projectToView(event.point);
+			pg.view.zoomByPoint(factor, viewPoint);
 		};
 		
 		var keyDownFired = false;
@@ -12891,6 +12951,7 @@ pg.tools.zoom = function() {
 	};
 	
 };
+
 </script>
 <script type="text/paperscript" data-paper-canvas="paperCanvas">
 // view pan tool
@@ -13007,18 +13068,31 @@ pg.tools.viewzoom = function() {
 	
 	
 	var updateTool = function(updateInfo) {
-						
+		var oe = updateInfo.originalEvent || updateInfo;
 		var factor = 1.25;
-		if (updateInfo.originalEvent.wheelDelta > 0 || updateInfo.originalEvent.detail < 0) {
+		if (oe.wheelDelta > 0 || oe.detail < 0) {
 			// scroll up / zoom in
-
 		} else {
 			// scroll down / zoom out
 			factor = 1 / factor;
 		}
-		
-		paper.view.center = ePoint;
-		pg.view.zoomBy(factor);
+
+		var canvas = document.getElementById('paperCanvas');
+		var clientX = oe.clientX;
+		var clientY = oe.clientY;
+		if((clientX === undefined || clientY === undefined) && updateInfo) {
+			clientX = updateInfo.clientX;
+			clientY = updateInfo.clientY;
+		}
+
+		if(canvas && clientX !== undefined && clientY !== undefined) {
+			var rect = canvas.getBoundingClientRect();
+			var viewPoint = new Point(clientX - rect.left, clientY - rect.top);
+			pg.view.zoomByPoint(factor, viewPoint);
+		} else {
+			paper.view.center = ePoint;
+			pg.view.zoomBy(factor);
+		}
 	};
 	
 	
@@ -13028,7 +13102,6 @@ pg.tools.viewzoom = function() {
 		updateTool: updateTool
 	};
 };
-
 
 
 

@@ -10,6 +10,29 @@ pg.view = function() {
 		}
 		pg.statusbar.update();
 	};
+
+	var zoomByPoint = function(factor, viewPoint) {
+		var view = paper.view;
+		var zoom = view.zoom;
+		var newZoom = zoom * factor;
+
+		if(newZoom <= 0.01) {
+			newZoom = 0.01;
+		} else if(newZoom >= 1000) {
+			newZoom = 1000;
+		}
+
+		if(viewPoint && view.viewToProject) {
+			var projectPoint = view.viewToProject(viewPoint);
+			var beta = zoom / newZoom;
+			var offset = projectPoint.subtract(view.center);
+			view.zoom = newZoom;
+			view.center = projectPoint.subtract(offset.multiply(beta));
+		} else {
+			view.zoom = newZoom;
+		}
+		pg.statusbar.update();
+	};
 	
 	
 	var resetZoom = function() {
@@ -25,6 +48,7 @@ pg.view = function() {
 	
 	return {
 		zoomBy: zoomBy,
+		zoomByPoint: zoomByPoint,
 		resetZoom: resetZoom,
 		resetPan: resetPan
 	};

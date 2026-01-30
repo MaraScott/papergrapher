@@ -34,8 +34,8 @@ pg.tools.zoom = function() {
 			if (event.modifiers.option) {
 				factor = 1 / factor;
 			}
-			pg.view.zoomBy(factor);
-			paper.view.center = event.point;
+			var viewPoint = paper.view.projectToView(event.point);
+			pg.view.zoomByPoint(factor, viewPoint);
 		};
 		
 		var keyDownFired = false;
