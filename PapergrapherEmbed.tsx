@@ -76,7 +76,8 @@ const TOOL_ICON_MAP: Record<string, ImageSourcePropType> = {
     rotate: require('./assets/icons/tool_rotate.png'),
     scale: require('./assets/icons/tool_scale.png'),
     exportrect: require('./assets/icons/tool_exportrect.png'),
-    zoom: require('./assets/icons/tool_zoom.png')
+    zoom: require('./assets/icons/tool_zoom.png'),
+    viewgrab: require('./assets/icons/tool_viewgrab.png')
 };
 
 const TOOL_SIDEBAR = [
@@ -93,6 +94,7 @@ const TOOL_SIDEBAR = [
     { id: 'rotate', label: 'Rotate', icon: TOOL_ICON_MAP.rotate },
     { id: 'scale', label: 'Scale', icon: TOOL_ICON_MAP.scale },
     { id: 'exportrect', label: 'Export', icon: TOOL_ICON_MAP.exportrect },
+    { id: 'viewgrab', label: 'Hand', icon: TOOL_ICON_MAP.viewgrab },
     { id: 'zoom', label: 'Zoom', icon: TOOL_ICON_MAP.zoom }
 ];
 
@@ -280,6 +282,37 @@ export default function PapergrapherEmbed() {
     useEffect(() => {
         sendCommand({ type: 'pg:command', action: 'fillColor', color: null });
         sendCommand({ type: 'pg:command', action: 'strokeColor', color: '#000000' });
+    }, []);
+
+    useEffect(() => {
+        if (Platform.OS !== 'web') return;
+        const handleKeyDown = (event: KeyboardEvent) => {
+            if (event.repeat) return;
+            const target = event.target as HTMLElement | null;
+            if (target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)) {
+                return;
+            }
+            if (event.code === 'Space' || event.key === ' ') {
+                event.preventDefault();
+                sendCommand({ type: 'pg:command', action: 'panStart' });
+            }
+        };
+        const handleKeyUp = (event: KeyboardEvent) => {
+            const target = event.target as HTMLElement | null;
+            if (target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)) {
+                return;
+            }
+            if (event.code === 'Space' || event.key === ' ') {
+                event.preventDefault();
+                sendCommand({ type: 'pg:command', action: 'panEnd' });
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        window.addEventListener('keyup', handleKeyUp);
+        return () => {
+            window.removeEventListener('keydown', handleKeyDown);
+            window.removeEventListener('keyup', handleKeyUp);
+        };
     }, []);
 
     const measureAnchor = (ref: React.RefObject<any>, setter: (value: Anchor | null) => void) => {
@@ -837,22 +870,36 @@ export default function PapergrapherEmbed() {
 
             <View style={styles.statusBar}>
                 <Text style={styles.statusText}>No selection</Text>
-                <TouchableOpacity
-                    style={styles.zoomSelect}
-                    ref={zoomRef}
-                    onPress={() => {
-                        setZoomOpen(true);
-                        setOpacityOpen(false);
-                        setBlendOpen(false);
-                        setMenuOpen(false);
-                        setToolMenuOpen(false);
-                        setColorOpen(false);
-                        setTimeout(() => measureAnchor(zoomRef, setZoomAnchor), 0);
-                    }}
-                >
-                    <Text style={styles.statusText}>Zoom</Text>
-                    <Text style={styles.zoomValue}>{zoomPercent}</Text>
-                </TouchableOpacity>
+                <View style={styles.zoomRow}>
+                    <TouchableOpacity
+                        style={styles.zoomButton}
+                        onPress={() => runAction('zoomOut')}
+                    >
+                        <Text style={styles.zoomButtonLabel}>-</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                        style={styles.zoomSelect}
+                        ref={zoomRef}
+                        onPress={() => {
+                            setZoomOpen(true);
+                            setOpacityOpen(false);
+                            setBlendOpen(false);
+                            setMenuOpen(false);
+                            setToolMenuOpen(false);
+                            setColorOpen(false);
+                            setTimeout(() => measureAnchor(zoomRef, setZoomAnchor), 0);
+                        }}
+                    >
+                        <Text style={styles.statusText}>Zoom</Text>
+                        <Text style={styles.zoomValue}>{zoomPercent}</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                        style={styles.zoomButton}
+                        onPress={() => runAction('zoomIn')}
+                    >
+                        <Text style={styles.zoomButtonLabel}>+</Text>
+                    </TouchableOpacity>
+                </View>
             </View>
 
             {menuOpen && (
@@ -1344,6 +1391,25 @@ const styles = StyleSheet.create({
         bottom: 6,
         flexDirection: 'row',
         alignItems: 'center'
+    },
+    zoomRow: {
+        flexDirection: 'row',
+        alignItems: 'center'
+    },
+    zoomButton: {
+        width: 22,
+        height: 22,
+        borderWidth: 1,
+        borderColor: '#cccccc',
+        backgroundColor: '#ffffff',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginRight: 4
+    },
+    zoomButtonLabel: {
+        fontSize: 14,
+        color: '#333333',
+        lineHeight: 16
     },
     statusText: {
         color: '#777777',

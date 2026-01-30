@@ -4,6 +4,39 @@ pg.toolbar = function() {
 		
 	var activeTool;
 	var previousTool;
+	var cursorMap = {
+		select: 'default',
+		detailselect: 'default',
+		draw: 'crosshair',
+		bezier: 'crosshair',
+		cloud: 'crosshair',
+		broadbrush: 'crosshair',
+		text: 'text',
+		eyedropper: 'crosshair',
+		circle: 'crosshair',
+		rectangle: 'crosshair',
+		rotate: 'move',
+		scale: 'move',
+		exportrect: 'crosshair'
+	};
+
+	var resetCursorClasses = function() {
+		var $body = jQuery('body');
+		$body.removeClass('zoom-in');
+		$body.removeClass('zoom-out');
+		$body.removeClass('grab');
+		$body.removeClass('grabbing');
+	};
+
+	var applyCursorForTool = function(toolID) {
+		if(!document || !document.body) return;
+		resetCursorClasses();
+		if(toolID === 'zoom' || toolID === 'viewgrab') {
+			document.body.style.cursor = '';
+			return;
+		}
+		document.body.style.cursor = cursorMap[toolID] || 'default';
+	};
 	
 	var setup = function() {
 		setupToolList();
@@ -75,6 +108,7 @@ pg.toolbar = function() {
 				previousTool = activeTool;
 			}
 			resetTools();
+			applyCursorForTool(toolID);
 			pg.stylebar.sanitizeSettings();
 			tool.activateTool();
 			activeTool = tool;

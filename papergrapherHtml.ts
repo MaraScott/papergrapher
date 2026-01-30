@@ -1796,6 +1796,85 @@ window.__PG_CONFIG__ = {"appVersion":"0.42"};
 </script>
 <script>
 (function () {
+  function getCanvas() {
+    return document.getElementById("paperCanvas");
+  }
+  function distance(a, b) {
+    var dx = a.x - b.x;
+    var dy = a.y - b.y;
+    return Math.sqrt(dx * dx + dy * dy);
+  }
+  function midpoint(a, b) {
+    return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+  }
+  function getTouches(evt) {
+    var t = evt.touches;
+    if (!t || t.length < 2) return null;
+    return [
+      { x: t[0].clientX, y: t[0].clientY },
+      { x: t[1].clientX, y: t[1].clientY }
+    ];
+  }
+  function attach() {
+    var canvas = getCanvas();
+    if (!canvas) return false;
+    var lastDistance = null;
+    var lastCenter = null;
+    var lastZoom = null;
+    canvas.addEventListener("touchstart", function (evt) {
+      if (evt.touches.length === 2) {
+        var pts = getTouches(evt);
+        if (!pts) return;
+        lastDistance = distance(pts[0], pts[1]);
+        lastCenter = midpoint(pts[0], pts[1]);
+        lastZoom = paper && paper.view ? paper.view.zoom : 1;
+        evt.preventDefault();
+      }
+    }, { passive: false });
+    canvas.addEventListener("touchmove", function (evt) {
+      if (evt.touches.length === 2 && paper && paper.view) {
+        var pts = getTouches(evt);
+        if (!pts || !lastCenter || !lastDistance) return;
+        var newCenter = midpoint(pts[0], pts[1]);
+        var newDistance = distance(pts[0], pts[1]);
+        var factor = newDistance / lastDistance;
+        if (factor && isFinite(factor)) {
+          var targetZoom = Math.max(0.05, Math.min(64, paper.view.zoom * factor));
+          var viewPoint = new paper.Point(newCenter.x, newCenter.y);
+          var before = paper.view.viewToProject(viewPoint);
+          paper.view.zoom = targetZoom;
+          var after = paper.view.viewToProject(viewPoint);
+          paper.view.center = paper.view.center.add(before.subtract(after));
+        }
+        var lastViewPoint = new paper.Point(lastCenter.x, lastCenter.y);
+        var newViewPoint = new paper.Point(newCenter.x, newCenter.y);
+        var delta = paper.view.viewToProject(lastViewPoint).subtract(paper.view.viewToProject(newViewPoint));
+        paper.view.scrollBy(delta);
+        lastCenter = newCenter;
+        lastDistance = newDistance;
+        evt.preventDefault();
+      }
+    }, { passive: false });
+    canvas.addEventListener("touchend", function (evt) {
+      if (!evt || !evt.touches || evt.touches.length < 2) {
+        lastDistance = null;
+        lastCenter = null;
+        lastZoom = null;
+      }
+    });
+    return true;
+  }
+  var tries = 0;
+  var interval = setInterval(function () {
+    tries += 1;
+    if (attach() || tries > 20) {
+      clearInterval(interval);
+    }
+  }, 300);
+})();
+</script>
+<script>
+(function () {
   var queue = [];
   function isReady() {
     return !!(window.pg && pg.toolbar && pg.stylebar && pg.undo && pg.export);
@@ -1946,6 +2025,15 @@ window.__PG_CONFIG__ = {"appVersion":"0.42"};
           break;
         case "zoomOut":
           if (pg.view && pg.view.zoomBy) { pg.view.zoomBy(1/1.25); }
+          break;
+        case "panStart":
+          if (pg.toolbar && pg.toolbar.switchTool) { pg.toolbar.switchTool("viewgrab", true); }
+          break;
+        case "panEnd":
+          if (pg.toolbar && pg.toolbar.getPreviousTool) {
+            var prev = pg.toolbar.getPreviousTool();
+            if (prev && prev.options && prev.options.id) { pg.toolbar.switchTool(prev.options.id, true); }
+          }
           break;
         case "setZoom":
           if (cmd.value !== undefined && cmd.value !== null && window.paper && paper.view) {
@@ -8291,6 +8379,39 @@ pg.toolbar = function() {
 		
 	var activeTool;
 	var previousTool;
+	var cursorMap = {
+		select: 'default',
+		detailselect: 'default',
+		draw: 'crosshair',
+		bezier: 'crosshair',
+		cloud: 'crosshair',
+		broadbrush: 'crosshair',
+		text: 'text',
+		eyedropper: 'crosshair',
+		circle: 'crosshair',
+		rectangle: 'crosshair',
+		rotate: 'move',
+		scale: 'move',
+		exportrect: 'crosshair'
+	};
+
+	var resetCursorClasses = function() {
+		var $body = jQuery('body');
+		$body.removeClass('zoom-in');
+		$body.removeClass('zoom-out');
+		$body.removeClass('grab');
+		$body.removeClass('grabbing');
+	};
+
+	var applyCursorForTool = function(toolID) {
+		if(!document || !document.body) return;
+		resetCursorClasses();
+		if(toolID === 'zoom' || toolID === 'viewgrab') {
+			document.body.style.cursor = '';
+			return;
+		}
+		document.body.style.cursor = cursorMap[toolID] || 'default';
+	};
 	
 	var setup = function() {
 		setupToolList();
@@ -8368,6 +8489,7 @@ pg.toolbar = function() {
 				previousTool = activeTool;
 			}
 			resetTools();
+			applyCursorForTool(toolID);
 			pg.stylebar.sanitizeSettings();
 			tool.activateTool();
 			activeTool = tool;
