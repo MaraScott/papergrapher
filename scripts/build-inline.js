@@ -165,6 +165,39 @@ function patchCodeEditorJs(content) {
   return content;
 }
 
+function patchLayerPanelJs(content) {
+  const loadStart = content.indexOf('var loadResources = function() {');
+  if (loadStart === -1) {
+    return content;
+  }
+  const loadEnd = content.indexOf('};', loadStart);
+  if (loadEnd === -1) {
+    return content;
+  }
+  const replacement = [
+    'var loadResources = function() {',
+    '\tif (window.__PG_LAYER_PANEL_CSS__) {',
+    '\t\tif (!document.getElementById("layerPanelCSS")) {',
+    '\t\t\tjQuery("<style />", { id: "layerPanelCSS" })',
+    '\t\t\t\t.text(window.__PG_LAYER_PANEL_CSS__)',
+    '\t\t\t\t.appendTo("head");',
+    '\t\t}',
+    '\t\treturn;',
+    '\t}',
+    '\tif(!jQuery(\'#layerPanelCSS\').exists()) {',
+    '\t\tjQuery(\"<link />\", {',
+    '\t\t\thref: \"css/layerPanel.css\",',
+    '\t\t\trel: \"stylesheet\",',
+    '\t\t\tid: \"layerPanelCSS\"',
+    '\t\t}).appendTo(\"head\", function() {',
+    '\t\t\treturn true;',
+    '\t\t});',
+    '\t};',
+    '};'
+  ].join('\n');
+  return content.slice(0, loadStart) + replacement + content.slice(loadEnd + 2);
+}
+
 function patchSettingsJs(content) {
   const replacement = [
     '\t\tvar data = window.__PG_CONFIG__;',
@@ -217,6 +250,9 @@ function patchScript(src, content) {
   }
   if (src === 'js/codeEditor.js') {
     return patchCodeEditorJs(content);
+  }
+  if (src === 'js/layerPanel.js') {
+    return patchLayerPanelJs(content);
   }
   return content;
 }
@@ -283,6 +319,7 @@ function buildInlineHtml() {
   }
 
   const codeEditorCss = readText(path.join(srcDir, 'css', 'codeEditor.css'));
+  const layerPanelCss = readText(path.join(srcDir, 'css', 'layerPanel.css'));
   const configJson = JSON.parse(readText(path.join(srcDir, 'config.json')));
 
   const iconSwitchPath = path.join(srcDir, 'assets', 'icon_switchColor.svg');
@@ -399,6 +436,7 @@ function buildInlineHtml() {
     'window.__PG_FONT_DATA__ = ' + safeJson(fontData) + ';',
     'window.__PG_USER_SCRIPTS__ = ' + safeJson({ scripts: userScriptList, content: userScriptContent }) + ';',
     'window.__PG_CODE_EDITOR_CSS__ = ' + safeJson(codeEditorCss) + ';',
+    'window.__PG_LAYER_PANEL_CSS__ = ' + safeJson(layerPanelCss) + ';',
     'window.__PG_CONFIG__ = ' + safeJson(configJson) + ';'
   ].join('\n');
 
@@ -604,6 +642,15 @@ function buildInlineHtml() {
     '        case "importSvgUrl":',
     '          var svgUrl = prompt("Paste URL to SVG", "http://");',
     '          if (svgUrl) { pg.import.importAndAddSVG(svgUrl); }',
+    '          break;',
+    '        case "importImageData":',
+    '          if (cmd.dataUrl) { pg.import.importAndAddImage(cmd.dataUrl); }',
+    '          break;',
+    '        case "importSvgString":',
+    '          if (cmd.svgString) { pg.import.importAndAddSVG(cmd.svgString); }',
+    '          break;',
+    '        case "importJsonString":',
+    '          if (cmd.jsonString) { pg.document.loadJSONDocument(cmd.jsonString); }',
     '          break;',
     '        case "resetView":',
     '          if (pg.view && pg.view.resetZoom) { pg.view.resetZoom(); }',

@@ -18,6 +18,7 @@ import {
 } from 'react-native';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as MediaLibrary from 'expo-media-library';
+import * as DocumentPicker from 'expo-document-picker';
 import WebView from 'react-native-webview';
 import { papergrapherHtml } from './papergrapherHtml';
 
@@ -41,6 +42,9 @@ type CommandPayload = {
     toolId?: string;
     color?: string | null;
     value?: number | null;
+    dataUrl?: string | null;
+    svgString?: string | null;
+    jsonString?: string | null;
 };
 
 type Anchor = {
@@ -342,7 +346,62 @@ export default function PapergrapherEmbed() {
         sendCommand({ type: 'pg:command', action: 'tool', toolId });
     };
 
+    const handleNativeImport = async (action: string) => {
+        try {
+            if (action === 'importImage') {
+                const result = await DocumentPicker.getDocumentAsync({
+                    type: ['image/*'],
+                    copyToCacheDirectory: true
+                });
+                if (result.canceled || !result.assets || !result.assets[0]) return;
+                const asset = result.assets[0];
+                const base64 = await FileSystem.readAsStringAsync(asset.uri, {
+                    encoding: FileSystem.EncodingType?.Base64 || 'base64'
+                });
+                if (!base64) return;
+                const mimeType = asset.mimeType || 'image/png';
+                const dataUrl = `data:${mimeType};base64,${base64}`;
+                sendCommand({ type: 'pg:command', action: 'importImageData', dataUrl });
+                return;
+            }
+
+            if (action === 'importSvg') {
+                const result = await DocumentPicker.getDocumentAsync({
+                    type: ['image/svg+xml', 'text/xml', 'application/xml'],
+                    copyToCacheDirectory: true
+                });
+                if (result.canceled || !result.assets || !result.assets[0]) return;
+                const asset = result.assets[0];
+                const svgString = await FileSystem.readAsStringAsync(asset.uri);
+                if (!svgString) return;
+                sendCommand({ type: 'pg:command', action: 'importSvgString', svgString });
+                return;
+            }
+
+            if (action === 'openJson') {
+                const result = await DocumentPicker.getDocumentAsync({
+                    type: ['application/json', 'text/json', 'text/plain'],
+                    copyToCacheDirectory: true
+                });
+                if (result.canceled || !result.assets || !result.assets[0]) return;
+                const asset = result.assets[0];
+                const jsonString = await FileSystem.readAsStringAsync(asset.uri);
+                if (!jsonString) return;
+                sendCommand({ type: 'pg:command', action: 'importJsonString', jsonString });
+                return;
+            }
+        } catch (error) {
+            console.warn('Import failed', error);
+        }
+    };
+
     const runAction = (action: string) => {
+        if (Platform.OS !== 'web') {
+            if (action === 'importImage' || action === 'importSvg' || action === 'openJson') {
+                void handleNativeImport(action);
+                return;
+            }
+        }
         if (action === 'switchColors') {
             const nextFill = strokeColor;
             const nextStroke = fillColor;
