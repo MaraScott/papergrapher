@@ -1460,6 +1460,19 @@ button {
 /* embed overrides */
 html, body {
 	background-color: #fff;
+	margin: 0;
+	padding: 0;
+}
+:root {
+	--pg-topbar: 30px;
+	--pg-sidebar: 76px;
+}
+#paperCanvas {
+	background-color: #fff !important;
+	top: var(--pg-topbar) !important;
+	left: var(--pg-sidebar) !important;
+	width: calc(100% - var(--pg-sidebar)) !important;
+	height: calc(100% - var(--pg-topbar)) !important;
 }
 #loadingScreen,
 #appNav,
@@ -1932,6 +1945,12 @@ window.__PG_CONFIG__ = {"appVersion":"0.42"};
           break;
         case "zoomOut":
           if (pg.view && pg.view.zoomBy) { pg.view.zoomBy(1/1.25); }
+          break;
+        case "setZoom":
+          if (cmd.value !== undefined && cmd.value !== null && window.paper && paper.view) {
+            paper.view.zoom = cmd.value;
+            if (pg.statusbar && pg.statusbar.update) { pg.statusbar.update(); }
+          }
           break;
         case "resetZoom":
           if (pg.view && pg.view.resetZoom) { pg.view.resetZoom(); }
